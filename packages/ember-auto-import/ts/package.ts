@@ -35,7 +35,7 @@ export interface Options {
   miniCssExtractPluginOptions?: Record<string, unknown>;
   forbidEval?: boolean;
   skipBabel?: { package: string; semverRange?: string }[];
-  watchDependencies?: (string | string[])[];
+  watchDependencies?: string[];
   insertScriptsAt?: string;
   insertStylesAt?: string;
 }
@@ -460,22 +460,13 @@ export default class Package {
     // only apps (not addons) are allowed to set this
     if (!this.isAddon && this.autoImportOptions?.watchDependencies) {
       return this.autoImportOptions.watchDependencies
-        .map((nameOrNames) => {
-          let names: string[];
-          if (typeof nameOrNames === 'string') {
-            names = [nameOrNames];
-          } else {
-            names = nameOrNames;
+        .map((name) => {
+          const [packageName, ...packageDirectory] = name.split('/');
+          const path = resolvePackagePath(packageName, this.root);
+          if (!path) {
+            return undefined;
           }
-          let cursor = this.root;
-          for (let name of names) {
-            let path = resolvePackagePath(name, cursor);
-            if (!path) {
-              return undefined;
-            }
-            cursor = dirname(path);
-          }
-          return cursor;
+          return join(dirname(path), ...packageDirectory);
         })
         .filter(Boolean) as string[];
     }
