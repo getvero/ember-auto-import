@@ -22,7 +22,6 @@ import { PackageCache } from '@embroider/shared-internals';
 import { Memoize } from 'typescript-memoize';
 import makeDebug from 'debug';
 import { ensureDirSync, symlinkSync, existsSync } from 'fs-extra';
-import MiniCssExtractPlugin from 'mini-css-extract-plugin';
 
 const debug = makeDebug('ember-auto-import:webpack');
 
@@ -142,7 +141,11 @@ export default class WebpackBundler extends Plugin implements Bundler {
       ];
     });
 
-    let { plugin: stylePlugin, loader: styleLoader } = this.setupStyleLoader();
+    let {
+      plugin: stylePlugin,
+      loader: styleLoader,
+      type: styleType,
+    } = this.setupStyleLoader();
 
     let config: Configuration = {
       mode:
@@ -202,6 +205,7 @@ export default class WebpackBundler extends Plugin implements Bundler {
                 )?.cssLoaderOptions,
               },
             ],
+            type: styleType,
           },
         ],
       },
@@ -223,17 +227,19 @@ export default class WebpackBundler extends Plugin implements Bundler {
   private setupStyleLoader(): {
     loader: RuleSetUseItem;
     plugin: WebpackPluginInstance | undefined;
+    type?: string;
   } {
     if (this.opts.environment === 'production' || this.opts.hasFastboot) {
       return {
-        loader: MiniCssExtractPlugin.loader,
-        plugin: new MiniCssExtractPlugin({
+        loader: (this.opts.webpack as any).CssExtractRspackPlugin.loader,
+        plugin: new (this.opts.webpack as any).CssExtractRspackPlugin({
           filename: `chunk.[id].[chunkhash].css`,
           chunkFilename: `chunk.[id].[chunkhash].css`,
           ...[...this.opts.packages].find(
             (pkg) => pkg.miniCssExtractPluginOptions
           )?.miniCssExtractPluginOptions,
         }),
+        type: 'javascript/auto',
       };
     } else
       return {
