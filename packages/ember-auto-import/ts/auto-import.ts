@@ -123,17 +123,17 @@ export default class AutoImport implements AutoImportSharedAPI {
     });
 
     let webpack: typeof webpackType;
-    const pkg = resolvePackagePath('webpack', this.rootPackage.root);
+    const pkg = resolvePackagePath('@rspack/core', this.rootPackage.root);
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    if (pkg && semver.satisfies(require(pkg).version, '^5.0.0')) {
+    if (pkg && semver.satisfies(require(pkg).version, '^1.2.7')) {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      webpack = require(resolve.sync('webpack', {
+      webpack = require(resolve.sync('@rspack/core', {
         basedir: this.rootPackage.root,
-      })) as typeof webpackType;
+      })).rspack as typeof webpackType;
     } else {
       throw new Error(
-        `[ember-auto-import] this version of ember-auto-import requires the app to have a dependency on webpack 5`
+        `[ember-auto-import] this version of ember-auto-import requires the app to have a dependency on @rspack/core ^1.2.7`
       );
     }
 
