@@ -9,7 +9,13 @@ import type {
 } from 'webpack';
 import { join, dirname, resolve } from 'path';
 import { mergeWith, flatten, zip } from 'lodash';
-import { writeFileSync, realpathSync, readFileSync } from 'fs';
+import {
+  writeFileSync,
+  realpathSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+} from 'fs';
 import { compile, registerHelper } from 'handlebars';
 import jsStringEscape from 'js-string-escape';
 import { BundleDependencies, ResolvedTemplateImport } from './splitter';
@@ -98,6 +104,7 @@ export default class WebpackBundler extends Plugin implements Bundler {
     | undefined;
 
   private lastBuildResult: BuildResult | undefined;
+  private previousFileState: Map<string, string>; // key: full path; value: hash
 
   constructor(priorTrees: InputNode[], private opts: BundlerOptions) {
     super(priorTrees, {
@@ -105,6 +112,7 @@ export default class WebpackBundler extends Plugin implements Bundler {
       needsCache: true,
       annotation: 'ember-auto-import-webpack',
     });
+    this.previousFileState = new Map();
   }
 
   get buildResult() {
@@ -353,6 +361,49 @@ export default class WebpackBundler extends Plugin implements Bundler {
     this.addDiscoveredExternals(this.lastBuildResult);
   }
 
+  private getModifiedAndDeletedFiles(): {
+    modifiedFiles: Set<string>;
+    removedFiles: Set<string>;
+  } {
+    const modifiedFiles = new Set<string>();
+    const removedFiles = new Set<string>();
+    const currentFileState = new Map<string, string>();
+
+    const walkDir = (dirPath: string) => {
+      const files = readdirSync(dirPath);
+
+      files.forEach((file) => {
+        const fullPath = join(dirPath, file);
+
+        if (statSync(fullPath).isDirectory()) {
+          walkDir(fullPath);
+        } else {
+          const fileStats = statSync(fullPath);
+          const fileHash = `${fileStats.mtime.getTime()}-${fileStats.size}`;
+
+          currentFileState.set(fullPath, fileHash);
+
+          const previousHash = this.previousFileState.get(fullPath);
+          if (!previousHash || previousHash !== fileHash) {
+            modifiedFiles.add(fullPath);
+          }
+        }
+      });
+    };
+
+    this.inputPaths.forEach(walkDir);
+
+    for (const filePath of this.previousFileState.keys()) {
+      if (!currentFileState.has(filePath)) {
+        removedFiles.add(filePath);
+      }
+    }
+
+    this.previousFileState = currentFileState;
+
+    return { modifiedFiles, removedFiles };
+  }
+
   private addDiscoveredExternals(build: BuildResult) {
     for (let assetFiles of build.entrypoints.values()) {
       for (let assetFile of assetFiles) {
@@ -544,7 +595,8 @@ export default class WebpackBundler extends Plugin implements Bundler {
         }
         // this cast is justified because we already checked hasErrors above
         resolve(stats as Required<Stats>);
-      });
+        // @ts-ignore
+      }, this.getModifiedAndDeletedFiles());
     }) as Promise<Required<Stats>>;
   }
 }
