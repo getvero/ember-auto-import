@@ -110,7 +110,7 @@ export default class WebpackBundler extends Plugin implements Bundler {
     super(priorTrees, {
       persistentOutput: true,
       needsCache: true,
-      annotation: 'ember-auto-import-webpack',
+      annotation: 'ember-auto-import-rspack',
     });
     this.previousFileState = new Map();
   }
