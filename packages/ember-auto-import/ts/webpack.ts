@@ -9,7 +9,13 @@ import type {
 } from 'webpack';
 import { join, dirname, resolve } from 'path';
 import { mergeWith, flatten, zip } from 'lodash';
-import { writeFileSync, realpathSync, readFileSync } from 'fs';
+import {
+  writeFileSync,
+  realpathSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+} from 'fs';
 import { compile, registerHelper } from 'handlebars';
 import jsStringEscape from 'js-string-escape';
 import { BundleDependencies, ResolvedTemplateImport } from './splitter';
@@ -22,7 +28,6 @@ import { PackageCache } from '@embroider/shared-internals';
 import { Memoize } from 'typescript-memoize';
 import makeDebug from 'debug';
 import { ensureDirSync, symlinkSync, existsSync } from 'fs-extra';
-import MiniCssExtractPlugin from 'mini-css-extract-plugin';
 
 const debug = makeDebug('ember-auto-import:webpack');
 
@@ -99,13 +104,15 @@ export default class WebpackBundler extends Plugin implements Bundler {
     | undefined;
 
   private lastBuildResult: BuildResult | undefined;
+  private previousFileState: Map<string, string>; // key: full path; value: hash
 
   constructor(priorTrees: InputNode[], private opts: BundlerOptions) {
     super(priorTrees, {
       persistentOutput: true,
       needsCache: true,
-      annotation: 'ember-auto-import-webpack',
+      annotation: 'ember-auto-import-rspack',
     });
+    this.previousFileState = new Map();
   }
 
   get buildResult() {
@@ -142,7 +149,11 @@ export default class WebpackBundler extends Plugin implements Bundler {
       ];
     });
 
-    let { plugin: stylePlugin, loader: styleLoader } = this.setupStyleLoader();
+    let {
+      plugin: stylePlugin,
+      loader: styleLoader,
+      type: styleType,
+    } = this.setupStyleLoader();
 
     let config: Configuration = {
       mode:
@@ -202,6 +213,7 @@ export default class WebpackBundler extends Plugin implements Bundler {
                 )?.cssLoaderOptions,
               },
             ],
+            type: styleType,
           },
         ],
       },
@@ -223,17 +235,19 @@ export default class WebpackBundler extends Plugin implements Bundler {
   private setupStyleLoader(): {
     loader: RuleSetUseItem;
     plugin: WebpackPluginInstance | undefined;
+    type?: string;
   } {
     if (this.opts.environment === 'production' || this.opts.hasFastboot) {
       return {
-        loader: MiniCssExtractPlugin.loader,
-        plugin: new MiniCssExtractPlugin({
+        loader: (this.opts.webpack as any).CssExtractRspackPlugin.loader,
+        plugin: new (this.opts.webpack as any).CssExtractRspackPlugin({
           filename: `chunk.[id].[chunkhash].css`,
           chunkFilename: `chunk.[id].[chunkhash].css`,
           ...[...this.opts.packages].find(
             (pkg) => pkg.miniCssExtractPluginOptions
           )?.miniCssExtractPluginOptions,
         }),
+        type: 'javascript/auto',
       };
     } else
       return {
@@ -345,6 +359,49 @@ export default class WebpackBundler extends Plugin implements Bundler {
     let stats = await this.runWebpack();
     this.lastBuildResult = this.summarizeStats(stats, bundleDeps);
     this.addDiscoveredExternals(this.lastBuildResult);
+  }
+
+  private getModifiedAndDeletedFiles(): {
+    modifiedFiles: Set<string>;
+    removedFiles: Set<string>;
+  } {
+    const modifiedFiles = new Set<string>();
+    const removedFiles = new Set<string>();
+    const currentFileState = new Map<string, string>();
+
+    const walkDir = (dirPath: string) => {
+      const files = readdirSync(dirPath);
+
+      files.forEach((file) => {
+        const fullPath = join(dirPath, file);
+
+        if (statSync(fullPath).isDirectory()) {
+          walkDir(fullPath);
+        } else {
+          const fileStats = statSync(fullPath);
+          const fileHash = `${fileStats.mtime.getTime()}-${fileStats.size}`;
+
+          currentFileState.set(fullPath, fileHash);
+
+          const previousHash = this.previousFileState.get(fullPath);
+          if (!previousHash || previousHash !== fileHash) {
+            modifiedFiles.add(fullPath);
+          }
+        }
+      });
+    };
+
+    this.inputPaths.forEach(walkDir);
+
+    for (const filePath of this.previousFileState.keys()) {
+      if (!currentFileState.has(filePath)) {
+        removedFiles.add(filePath);
+      }
+    }
+
+    this.previousFileState = currentFileState;
+
+    return { modifiedFiles, removedFiles };
   }
 
   private addDiscoveredExternals(build: BuildResult) {
@@ -538,7 +595,8 @@ export default class WebpackBundler extends Plugin implements Bundler {
         }
         // this cast is justified because we already checked hasErrors above
         resolve(stats as Required<Stats>);
-      });
+        // @ts-ignore
+      }, this.getModifiedAndDeletedFiles());
     }) as Promise<Required<Stats>>;
   }
 }
