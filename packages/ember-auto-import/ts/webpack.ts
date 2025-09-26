@@ -149,11 +149,7 @@ export default class WebpackBundler extends Plugin implements Bundler {
       ];
     });
 
-    let {
-      plugin: stylePlugin,
-      loader: styleLoader,
-      type: styleType,
-    } = this.setupStyleLoader();
+    let { plugin: stylePlugin, loader: styleLoader } = this.setupStyleLoader();
 
     let config: Configuration = {
       mode:
@@ -213,7 +209,7 @@ export default class WebpackBundler extends Plugin implements Bundler {
                 )?.cssLoaderOptions,
               },
             ],
-            type: styleType,
+            type: 'javascript/auto',
           },
         ],
       },
@@ -235,7 +231,6 @@ export default class WebpackBundler extends Plugin implements Bundler {
   private setupStyleLoader(): {
     loader: RuleSetUseItem;
     plugin: WebpackPluginInstance | undefined;
-    type?: string;
   } {
     if (this.opts.environment === 'production' || this.opts.hasFastboot) {
       return {
@@ -247,7 +242,6 @@ export default class WebpackBundler extends Plugin implements Bundler {
             (pkg) => pkg.miniCssExtractPluginOptions
           )?.miniCssExtractPluginOptions,
         }),
-        type: 'javascript/auto',
       };
     } else
       return {
