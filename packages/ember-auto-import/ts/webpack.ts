@@ -395,6 +395,12 @@ export default class WebpackBundler extends Plugin implements Bundler {
 
     this.previousFileState = currentFileState;
 
+    [...this.opts.packages]
+      .flatMap((pkg) => pkg.alwaysRebuildPaths)
+      .forEach((alwaysRebuildPath) => {
+        modifiedFiles.add(alwaysRebuildPath);
+      });
+
     return { modifiedFiles, removedFiles };
   }
 

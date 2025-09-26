@@ -38,6 +38,7 @@ export interface Options {
   watchDependencies?: string[];
   insertScriptsAt?: string;
   insertStylesAt?: string;
+  alwaysRebuildPaths?: string[];
 }
 
 export interface DepResolution {
@@ -368,6 +369,10 @@ export default class Package {
 
   get skipBabel(): Options['skipBabel'] {
     return this.autoImportOptions && this.autoImportOptions.skipBabel;
+  }
+
+  get alwaysRebuildPaths(): string[] {
+    return this.autoImportOptions?.alwaysRebuildPaths || [];
   }
 
   get aliases(): Record<string, string> | undefined {
