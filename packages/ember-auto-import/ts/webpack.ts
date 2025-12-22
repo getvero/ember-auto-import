@@ -181,7 +181,6 @@ export default class WebpackBundler extends Plugin implements Bundler {
           // not overriding the default loader resolution rules in case the app also
           // wants to control those.
           'babel-loader-8': require.resolve('babel-loader'),
-          'eai-style-loader': require.resolve('style-loader'),
           'eai-css-loader': require.resolve('css-loader'),
         },
       },
@@ -232,26 +231,16 @@ export default class WebpackBundler extends Plugin implements Bundler {
     loader: RuleSetUseItem;
     plugin: WebpackPluginInstance | undefined;
   } {
-    if (this.opts.environment === 'production' || this.opts.hasFastboot) {
-      return {
-        loader: (this.opts.webpack as any).CssExtractRspackPlugin.loader,
-        plugin: new (this.opts.webpack as any).CssExtractRspackPlugin({
-          filename: `chunk.[id].[chunkhash].css`,
-          chunkFilename: `chunk.[id].[chunkhash].css`,
-          ...[...this.opts.packages].find(
-            (pkg) => pkg.miniCssExtractPluginOptions
-          )?.miniCssExtractPluginOptions,
-        }),
-      };
-    } else
-      return {
-        loader: {
-          loader: 'eai-style-loader',
-          options: [...this.opts.packages].find((pkg) => pkg.styleLoaderOptions)
-            ?.styleLoaderOptions,
-        },
-        plugin: undefined,
-      };
+    return {
+      loader: (this.opts.webpack as any).CssExtractRspackPlugin.loader,
+      plugin: new (this.opts.webpack as any).CssExtractRspackPlugin({
+        filename: `chunk.[id].[chunkhash].css`,
+        chunkFilename: `chunk.[id].[chunkhash].css`,
+        ...[...this.opts.packages].find(
+          (pkg) => pkg.miniCssExtractPluginOptions
+        )?.miniCssExtractPluginOptions,
+      }),
+    };
   }
 
   private skipBabel(): Required<Options>['skipBabel'] {
